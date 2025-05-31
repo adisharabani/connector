@@ -15,7 +15,22 @@ from logger import get_logger
 # Get logger for this module
 logger = get_logger(__name__)
 
-class LutronDevice(Connector):
+class LutronConnector(Connector):
+    """Base class for Lutron-specific connectors that need to process events."""
+    
+    def process_event(self, line: str) -> None:
+        pass
+
+    def safely_process_event(self, line: str) -> bool:
+        try:
+            return self.process_event(line)
+        except Exception as e:
+            import traceback
+            logger.error(f"Error processing event in {self.name}: {str(e)}\n{traceback.format_exc()}")
+            return False
+
+
+class LutronDevice(LutronConnector):
     def __init__(self, lutron: 'Lutron', device_id: int):
         super().__init__()  # Initialize with no value
         self.lutron = lutron
@@ -34,8 +49,9 @@ class LutronDevice(Connector):
         if m := re.match(rf"~OUTPUT,{self.device_id},1,(\d+)", line):
             value = int(m.group(1))
             self.set(value / 100.0, act=False)
+            return True
 
-class LutronSysvar(Connector):
+class LutronSysvar(LutronConnector):
     def __init__(self, lutron: 'Lutron', sysvar_id: int):
         super().__init__()  # Initialize with no value
         self.lutron = lutron
@@ -53,8 +69,9 @@ class LutronSysvar(Connector):
         if m := re.match(rf"~SYSVAR,{self.sysvar_id},1,(\d+)", line):
             value = int(m.group(1))
             self.set(value, act=False)
+            return True
 
-class LutronKeypad(Connector):
+class LutronKeypad(LutronConnector):
     def __init__(self, lutron: 'Lutron', keypad_id: int, button_id: int, click_type=3):
         # Click types: 3=press, 4=release, 5=long press, 6=double press
         super().__init__()  # Initialize with no value
@@ -80,8 +97,9 @@ class LutronKeypad(Connector):
         # DEVICE event: ~DEVICE,keypad_id,button_id,event_type
         if m := re.match(rf"~DEVICE,{self.keypad_id},{self.button_id},{self.click_type}", line):
             self.set(True, act=False)
+            return True
 
-class ToggleCommand(Connector):
+class ToggleCommand(LutronConnector):
     def __init__(self,lutron,cmd_on=None, cmd_off=None):
         super().__init__()  # Initialize with no value
         self.cmd_on = cmd_on
@@ -105,7 +123,7 @@ class Lutron(Service):
         self.sock: Optional[socket.socket] = None
         
         # Single list of all handlers
-        self._handlers: List[Connector] = []
+        self._handlers: List[LutronConnector] = []
         
         # Connect and start listening
         self.connect()
@@ -176,17 +194,19 @@ class Lutron(Service):
                 time.sleep(5)
                 self.connect()
     
-    def register_handler(self, handler: Connector):
+    def register_handler(self, handler: LutronConnector):
         """Register a handler for Lutron events."""
         self._handlers.append(handler)
 
     def _process_event(self, line: str):
         """Process a single event line by passing it to all handlers."""
-        logger.debug("Processing: %s", line)
-        
+        # logger.debug("Processing Line: %s", line)
+
         # Pass the event to all handlers - they'll decide if they want to handle it
-        for handler in self._handlers:
-            handler.process_event(line)
+        had_positive_handler = False
+        if any([handler.safely_process_event(line) is not None for handler in self._handlers]):
+            logger.debug("Processed Line: %s", line)
+            return True
     
     def device(self, device_id: int) -> LutronDevice:
         """Create and return a new LutronDevice instance for the given device ID."""

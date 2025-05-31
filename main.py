@@ -11,7 +11,7 @@ logger.info("Starting connector service (YAML config)")
 
 
 def main():
-    executor = ConfigExecutor('config.yaml')
+    executor = ConfigExecutor('data/config.yaml')
     executor.execute()
     
     logger.info("Press Ctrl+C to exit...")

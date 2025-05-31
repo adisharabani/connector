@@ -16,14 +16,14 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "Installing system dependencies..."
-apt install mosquitto-clients  
+apt install mosquitto-clients raop_play
 #apt install -y netcat python3-venv python3-full
 
 echo "Creating system-wide virtual environment in /opt/connector..."
 python3 -m venv /opt/connector
 
 echo "Installing Python dependencies..."
-/opt/connector/bin/pip install pyyaml
+/opt/connector/bin/pip install pyyaml google-cloud-texttospeech
 
 echo "Making main.py executable..."
 chmod +x "$SCRIPT_DIR/main.py"
