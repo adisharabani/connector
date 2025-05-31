@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 class FilterAnalyzer:
     def __init__(self, parent_analyzer=None, pattern=None):
-        logger.debug(f"Filter: {pattern}")
+        if pattern: logger.debug(f"Creating Shell Filter: {pattern}")
         self.parent = parent_analyzer
         self.pattern = re.compile(pattern) if pattern else None
         self.callbacks = []
@@ -52,7 +52,7 @@ class FilterAnalyzer:
 
 
 class ShellListener(FilterAnalyzer):
-    def __init__(self, shell_command, executable=None):
+    def __init__(self, shell_command=None, executable=None):
         """
         Initialize a listener that uses a shell command to receive data.
         
@@ -65,7 +65,7 @@ class ShellListener(FilterAnalyzer):
         self.executable = executable
         self.running = False
         self.process = None
-        self.start()
+        # self.start()
         
     def start(self):
         """Start the listener process."""
@@ -91,7 +91,7 @@ class ShellListener(FilterAnalyzer):
         """Main listening loop that executes the shell command and processes output."""
         while self.running:
             try:
-                logger.debug(f"Starting Shell Listener: {self.shell_command}")
+                logger.debug(f"Starting Shell Listener")
                 self.process = subprocess.Popen(
                     self.shell_command,
                     shell=True,
@@ -108,7 +108,7 @@ class ShellListener(FilterAnalyzer):
                     if line:
                         #logger.debug("Processing Line: %s", line)
                         if self._process_line(line):
-                            logger.debug("Processed Line: %s", line)
+                            logger.debug("Shell line: %s", line)
 
                         
             except Exception as e:

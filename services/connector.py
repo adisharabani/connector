@@ -41,8 +41,11 @@ class Connector:
             original_value = self._value
             self._value = value
             if act: self._set_action(value)
-            logger.debug(f"{BLUE}{self.name} value changed from {original_value} to {value}{RESET}")
-            self.notify_set()
+            if original_value is None:
+                logger.info(f"{BLUE}{self.name} loaded value is {value}{RESET}")
+            else:
+                logger.info(f"{BLUE}{self.name} value changed from {original_value} to {value}{RESET}")
+                self.notify_set()
     
     def notify_set(self):
         # Notify our listeners

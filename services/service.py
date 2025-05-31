@@ -21,6 +21,10 @@ class Service(metaclass=ServiceMeta):
         """Initialize the service."""
         pass
     
+    def start(self):
+        """Start the service. Override in subclasses if needed."""
+        pass
+        
     def stop(self):
         """Stop the service and clean up resources. Override in subclasses if needed."""
         pass

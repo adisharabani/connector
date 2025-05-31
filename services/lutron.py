@@ -115,6 +115,7 @@ class ToggleCommand(LutronConnector):
 class Lutron(Service):
     def __init__(self, host: str, port: int, username: str, password: str):
         """Initialize a Lutron connection."""
+        logger.info("Creating Lutron service (%s@%s:%s)", username, host, port)
         super().__init__()
         self.host = host
         self.port = port
@@ -125,6 +126,9 @@ class Lutron(Service):
         # Single list of all handlers
         self._handlers: List[LutronConnector] = []
         
+
+    def start(self):
+        logger.info(f"Starting Lutron listener for {self.username}@{self.host}:{self.port}")
         # Connect and start listening
         self.connect()
         self._start_listener()

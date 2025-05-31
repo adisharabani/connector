@@ -9,17 +9,20 @@ import time
 # Get logger for this module
 logger = get_logger(__name__)
 
-class ConfigExecutor:
+class Configurator:
     def __init__(self, config_path: str):
+        logger.info("Analyzing config file")
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
         # Initialize services
-        self.services = self._init_services()
-        time.sleep(3)
+        self.services = self._load_services()
+        self.bind_connectors()
+        self.start_services()
         
-    def _init_services(self) -> Dict[str, Any]:
+    def _load_services(self) -> Dict[str, Any]:
         """Initialize all services from config."""
+        logger.info("Loading Services")
         services = {}
         for name, config in self.config['services'].items():
             service_class = Service.get_service_class(name)
@@ -54,36 +57,41 @@ class ConfigExecutor:
             logger.error(f"No device found for service {name=} {service=}")
             logger.info(f"{self.services=}")
 
-    def execute(self):
+    def bind_connectors(self):
         """Execute all bindings from the config."""
+        logger.info("Binding Connectors")
         for binding in self.config['bindings']:
             # Get binding type (sync or one_waycontrollers
-            filter = binding.get("filter")
+            # filter = binding.get("filter")
             one_way = binding.get("direction") == "one-way"
             sequence = binding.get("direction") == "sequence"
 
             controllers = [self._get_bindable_object(x) for x in binding["binding"]]
 
             if sequence:
-                self.sequences= Sequencer(controllers,filter=filter)
+                self.sequences= Sequencer(controllers)
 
             else:
                 for source, target in zip(controllers, controllers[1:]):
-                    source.on_set(target.set, filter=filter)
+                    source.on_set(target.set)#, filter=filter)
 
                     if not one_way:
-                        target.on_set(source.set, filter=filter)
+                        target.on_set(source.set)#, filter=filter)
                     
-                    logger.info(f"Created binding: {source.name} {'-->' if one_way else '<-->' } {target.name}")
+                    logger.info(f"Binding set: {source.name} {'-->' if one_way else '<-->' } {target.name}")
+
+    def start_services(self):
+        logger.info("Starting Services")
+        [service.start() for service in self.services.values()]
 
 
 class Sequencer:
-    def __init__(self, controllers, filter=None):
+    def __init__(self, controllers):
         self.controllers = controllers
         for i in range(len(controllers)-1):
-            self.controllers[i].on_set(lambda v,i=i: self.set(v,i), filter=filter)
+            self.controllers[i].on_set(lambda v,i=i: self.set(v,i))
         self.state=0
-        logger.info(f"Created sequence: {'->'.join([x.name for x in controllers])}")
+        logger.info(f"Sequence set: {' -> '.join([x.name for x in controllers])}")
     def set(self,value,index):
         if index==self.state:
             if value:

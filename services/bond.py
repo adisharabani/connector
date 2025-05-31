@@ -55,17 +55,24 @@ class Bond(Service):
             token: The Bond API token
         """
         super().__init__()
+        logger.info("Creating Bond service (%s:%d)", address, port)
+
         self.address = address
         self.port = port
         self.token = token
+
+        self.listener = ShellListener()
         
-        # Create the listener for state updates with a shorter sleep time for more responsive updates
-        logger.info("Creating Bond listener for %s:%d", address, port)
-        self.listener = ShellListener(f"(while true; do echo ; sleep 60; done) | nc -u {address} {port}")
 
     def device(self, device_id: str) -> BondDevice:
         return BondDevice(self, device_id)
-    
+
+    def start(self):
+        # Create the listener for state updates with a shorter sleep time for more responsive updates
+        self.listener.shell_command = f"(while true; do echo ; sleep 60; done) | nc -u {self.address} {self.port}"
+        logger.info("Starting Bond listener for %s:%d", self.address, self.port)
+        self.listener.start()
+
     def stop(self):
         """Stop the listener and clean up resources."""
         logger.info("Stopping Bond listener")

@@ -58,18 +58,28 @@ class MQTTDevice(Connector):
         self.mqtt.send(topic=command_topic, message=message)
 
 class MQTT(Service):
-    def __init__(self, host: str, username: str, password: str, topics: None, protocols = mqtt_protocols):
+    def __init__(self, host: str, username: str, password: str, protocols = mqtt_protocols):
         super().__init__()
-        logger.info("Creating MQTT Listener (%s) (%s)", host, topics)
+        logger.info("Creating MQTT service (%s@%s)", username, host)
         self.host = host
         self.username = username
         self.password = password
         self.protocols = protocols
-        
+        self.topics = set()
         # Create the listener for state updates
-        self.listener = ShellListener(f"mosquitto_sub -h {host} -u {username} -P {password} -t {' -t '.join(topics) if topics else '#'} -v")
+        self.listener = ShellListener(f"")
+        
+    def start(self):
+        # Create the listener for state updates
+        if self.topics:
+            self.listener.shell_command = f"mosquitto_sub -h {self.host} -u {self.username} -P {self.password} -t {' -t '.join(self.topics) if self.topics else '#'} -v"
+            logger.info(f"Starting MQTT listener for {self.username}@{self.host} with topics: {', '.join(self.topics) if self.topics else '#'}")
+            self.listener.start()
+        else:
+            logger.error("No devices/topics found so no need to start MQTT service")
     
     def device(self, topic: str, protocol: str = "plain") -> MQTTDevice:
+        self.topics.add(topic)
         return MQTTDevice(self, topic, self.protocols[protocol] if protocol else mqtt_protocols["plain"])
     
     def send(self, topic: str, message: str):
