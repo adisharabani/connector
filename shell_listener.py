@@ -12,11 +12,12 @@ logger = get_logger(__name__)
 
 
 class FilterAnalyzer:
-    def __init__(self, parent_analyzer=None, pattern=None):
+    def __init__(self, parent_analyzer=None, pattern=None, log = True):
         if pattern: logger.debug(f"Creating Shell Filter: {pattern}")
         self.parent = parent_analyzer
         self.pattern = re.compile(pattern) if pattern else None
         self.callbacks = []
+        self.log = log
         
         # Register with parent to receive all lines
         if self.parent:
@@ -26,12 +27,12 @@ class FilterAnalyzer:
         if self.pattern:
             match = self.pattern.search(line)
             if not match: return 
-            matched_group = match.group(1) if match.groups() else line
+            matched_group = match.groupdict() if match.groupdict() else match.group(1) if match.groups() else line
         else:
             matched_group = line
 
-        return any([self.safe_callback(callback, line, matched_group) is not None for callback in self.callbacks])
-                        
+        analyzed = any([self.safe_callback(callback, line, matched_group) is not None for callback in self.callbacks])
+        return analyzed if self.log else None 
     
     def safe_callback(self, callback, line, matched_group):
         try:   
@@ -46,9 +47,9 @@ class FilterAnalyzer:
             self.callbacks.append(callback)
         return self
     
-    def filter(self, pattern):
+    def filter(self, pattern, log=True):
         """Create a nested filtered listener with an additional filter"""
-        return FilterAnalyzer(self, pattern) 
+        return FilterAnalyzer(self, pattern, log) 
 
 
 class ShellListener(FilterAnalyzer):
@@ -92,6 +93,7 @@ class ShellListener(FilterAnalyzer):
         while self.running:
             try:
                 logger.debug(f"Starting Shell Listener")
+                #logger.debug(f"Starting Shell Listener {self.shell_command}")
                 self.process = subprocess.Popen(
                     self.shell_command,
                     shell=True,
@@ -106,11 +108,14 @@ class ShellListener(FilterAnalyzer):
                     if not line and self.process.poll() is not None:
                         break
                     if line:
-                        #logger.debug("Processing Line: %s", line)
+                        # logger.debug("Processing Line: %s", line)
                         if self._process_line(line):
                             logger.debug("Shell line: %s", line)
 
-                        
+                logger.warning("Listener ended")
+                out, err = self.process.communicate()
+                if err: 
+                    logger.error(f"{err}")    
             except Exception as e:
                 logger.error("Listener error: %s", e)
             finally:

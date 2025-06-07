@@ -25,8 +25,8 @@ class Connector:
     
     """
     
-    def __init__(self):
-        self.name = f"{self.__class__.__name__}<{id(self)}>"
+    def __init__(self, name=None):
+        self.name = name or f"{self.__class__.__name__}<{id(self)}>"
         self._value = None
         self._listeners: List[Callable[[Any], None]] = []
     
@@ -34,6 +34,7 @@ class Connector:
         return self._value
     
     def _set_action(self, value: Any) -> None:
+        # Override to add code when set is called externally
         pass
     
     def set(self, value: Any, act=True) -> bool:
@@ -81,7 +82,7 @@ class Connector:
         cmd = eval(f"lambda value: {cmd}")
         return Lambda(self, cmd)
 
-    def filter(self, cmd):
+    def filter(self, cmd="value"):
         cmd = eval(f"lambda value: {cmd}")
         fcmd = lambda v:v if cmd(v) else None 
         return Lambda(self, fcmd, fcmd)

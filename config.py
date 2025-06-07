@@ -40,7 +40,9 @@ class Configurator:
             ret = service
             for operation in config:
                 if isinstance(operation, str):
-                    ret = getattr(ret, operation)()
+                    ret = getattr(ret, operation)
+                    if callable(ret): 
+                        ret = ret()
                 else:
                     method_name, args = next(iter(operation.items()))
                     method = getattr(ret,method_name)
@@ -93,11 +95,11 @@ class Sequencer:
         self.state=0
         logger.info(f"Sequence set: {' -> '.join([x.name for x in controllers])}")
     def set(self,value,index):
-        logger.debug(f"sequence {value=} {index=} {self.state=}")
+        logger.debug(f"Sequence {value=} {index=} {self.state=}")
         if index == self.state-1 and value is None:
-            #self.state = index
-            #logger.debug(f"Sequence state reset {self.state=}")
-            pass
+            self.state = index
+            logger.debug(f"Sequence state reset {self.state=}")
+            # pass
         elif index == self.state and value is not None:
             self.state+=1
             logger.debug(f"Sequence state increased {self.state=}")
