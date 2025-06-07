@@ -89,21 +89,22 @@ class Sequencer:
     def __init__(self, controllers):
         self.controllers = controllers
         for i in range(len(controllers)-1):
-            self.controllers[i].on_set(lambda v,i=i: self.set(v,i))
+            self.controllers[i].on_set(lambda v,i=i,self=self: self.set(v,i))
         self.state=0
         logger.info(f"Sequence set: {' -> '.join([x.name for x in controllers])}")
     def set(self,value,index):
-        if index==self.state:
-            if value:
-                self.state+=1
-                logger.debug(f"Sequence state increased {self.state=}")
-            elif index>0:
-                self.state-=1
-                logger.debug(f"Sequence state reset {self.state=}")
+        logger.debug(f"sequence {value=} {index=} {self.state=}")
+        if index == self.state-1 and value is None:
+            #self.state = index
+            #logger.debug(f"Sequence state reset {self.state=}")
+            pass
+        elif index == self.state and value is not None:
+            self.state+=1
+            logger.debug(f"Sequence state increased {self.state=}")
             if self.state==len(self.controllers)-1:
                 logger.debug(f"Sequence completed")
+                self.state = 0
                 self.controllers[-1].set(value)
-                self.state=0
 
 
 

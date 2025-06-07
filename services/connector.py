@@ -42,7 +42,9 @@ class Connector:
             self._value = value
             if act: self._set_action(value)
             if original_value is None:
-                logger.info(f"{BLUE}{self.name} loaded value is {value}{RESET}")
+                logger.info(f"{BLUE}{self.name} first value is {value}{RESET}")
+                # TODO: We don't want this, but if I remove it we can break filter and other complex automations
+                self.notify_set()
             else:
                 logger.info(f"{BLUE}{self.name} value changed from {original_value} to {value}{RESET}")
                 self.notify_set()
@@ -95,15 +97,15 @@ class Lambda(Connector):
 
     def _act(self, value):
         lvalue = self._cmd(value)
-        if lvalue is not None:
-            self.set(lvalue, act=False)
+        #if lvalue is not None:
+        self.set(lvalue, act=False)
 
     def _set_action(self, value: Any) -> None:
         # When our value changes, update the source with the opposite value
         if self._reversed_cmd:
             rvalue = self._reversed_cmd(value)
-            if rvalue is not None:
-                self._source.set(rvalue)
+            #if rvalue is not None:
+            self._source.set(rvalue)
 
 class Inverse(Connector):
     def __init__(self, source: Connector):
@@ -132,13 +134,8 @@ class Once(Connector):
                 self.set(value, act=False)
                 self._timer = threading.Timer(86400*self._days, lambda: self._stop_timer() or self.set(False, act=False))
         else:
-            self._stop_timer(value)
+            #self._stop_timer(value)
             self.set(value, act=False)
-
-    def _stop_timer(self, v=False):
-        if self._timer:
-            self._timer.cancel()
-            self._timer = None
 
     def _set_action(self, value: Any):
         if value:
@@ -146,6 +143,11 @@ class Once(Connector):
                 self._source.set(value)
                 self._timer = threading.Timer(86400*self._days, lambda: self._stop_timer() or self._source.set(False))
         else:
-            self._stop_timer(value)
+            #self._stop_timer(value)
             self._source.set(value)
 
+    def _stop_timer(self, v=False):
+        if self._timer:
+            self._timer.cancel()
+            self._timer = None
+        

@@ -103,11 +103,11 @@ class GoogleTTS(Service):
         else:
             voice = texttospeech.VoiceSelectionParams(
                 language_code="en-US",
-                name="en-US-Neural2-F"
+                name="en-US-Chirp-HD-D"
             )
             audio_config = texttospeech.AudioConfig(
                 audio_encoding=texttospeech.AudioEncoding.LINEAR16,
-                speaking_rate=1.2,  
+                speaking_rate=1,  
                 pitch=0.0
             )
         return voice, audio_config
@@ -118,15 +118,20 @@ class GoogleTTS(Service):
         If output_file is provided, save to file. Otherwise return processed audio bytes.
         
         Args:
-            text: The text to convert to speech
+            text: The text to convert to speech. If text starts with <speak>, it will be treated as SSML.
             output_file: Optional path to save the processed audio file
             
         Returns:
             bytes: The processed audio data if output_file is None
         """
         try:
-            # Set the text input to be synthesized
-            synthesis_input = texttospeech.SynthesisInput(text=text)
+            # Check if input is SSML
+            if text.strip().lower().startswith('<speak>'):
+                logger.debug("Using ssml")
+                synthesis_input = texttospeech.SynthesisInput(ssml=text)
+            else:
+                logger.debug("Using text")
+                synthesis_input = texttospeech.SynthesisInput(text=text)
             
             # Get voice parameters from service
             voice, audio_config = self.get_voice_params(text)
@@ -170,6 +175,12 @@ if __name__ == "__main__":
     message = sys.argv[2]
     
     try:
+        # Configure logger for debug level when running directly
+        from logger import setup_logger, get_logger
+        setup_logger()
+        logger = get_logger(__name__)
+        logger.info("Starting home automation connector")
+        
         # For testing, we'll use the credentials file directly
         credentials_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "homekitai-58ec470d4bd3.json")
         tts_service = GoogleTTS(homepod_ip, 50, credentials_file=credentials_path)

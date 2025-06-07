@@ -72,7 +72,8 @@ class MQTT(Service):
     def start(self):
         # Create the listener for state updates
         if self.topics:
-            self.listener.shell_command = f"mosquitto_sub -h {self.host} -u {self.username} -P {self.password} -t {' -t '.join(self.topics) if self.topics else '#'} -v"
+            self.listener.shell_command = f"mosquitto_sub -h {self.host} -u {self.username} -P {self.password} -t {('/# -t '.join(self.topics)+'/#') if self.topics else '#'} -v"
+            logger.error(self.listener.shell_command)
             logger.info(f"Starting MQTT listener for {self.username}@{self.host} with topics: {', '.join(self.topics) if self.topics else '#'}")
             self.listener.start()
         else:
