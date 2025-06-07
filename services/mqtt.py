@@ -104,10 +104,10 @@ class UserPresense:
 
 
 
-class MQTTPresense:
-    def __init__(self, mqtt: 'MQTT', inside_room, outside_room, outside_reset_time=3, outside_distance=4):
-        logger.info(f"Creating MQTTPresense (Inside room: {inside_room}, Outside room: {outside_room})")
-        self.mqtt = mqtt
+class ESPresense(Service):
+    def __init__(self, service: 'MQTT', inside_room, outside_room, outside_reset_time=3, outside_distance=4):
+        logger.info(f"Creating ESPresense (Inside room: {inside_room}, Outside room: {outside_room})")
+        self.mqtt = service
         self.inside_room = inside_room
         self.outside_room = outside_room
         self.outside_reset_time = outside_reset_time
@@ -126,11 +126,13 @@ class MQTTPresense:
 
 
         self.anybody = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room)
-            
+        
     def __getattr__(self, name):
         return self._get_sensor(name)
         # if name in self.sensors:
         #     return lambda: self.sensors[name]
+    def device(self,name):
+        return self._get_sensor(name)
         
     def _get_sensor(self,name):
         if name not in self.sensors:
@@ -187,9 +189,6 @@ class MQTT(Service):
 
     def device(self, topic: str, protocol: str = "plain") -> MQTTDevice:
         return MQTTDevice(self, topic, self.protocols[protocol] if protocol else mqtt_protocols["plain"])
-
-    def espresense(self, inside_room, outside_room):
-        return MQTTPresense(self, inside_room, outside_room)
 
     def send(self, topic: str, message: str, retain = False):
         logger.info("Sending MQTT command: topic=%s message=%s", topic, message)

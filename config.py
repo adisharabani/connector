@@ -29,6 +29,9 @@ class Configurator:
             if service_class is None:
                 logger.error(f"No service class found for '{name}'")
                 continue
+            
+            if "service" in config:
+                config["service"] = services[config["service"]]
             services[name] = service_class(**config)
         return services
     
