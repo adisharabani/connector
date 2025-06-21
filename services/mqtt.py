@@ -29,13 +29,14 @@ mqtt_protocols = {  "plain": {
                 }
 
 class MQTTDevice(Connector):
-    def __init__(self, mqtt: 'MQTT', topic: str, protocol = None):
+    def __init__(self, mqtt: 'MQTT', topic: str, protocol = {"state_suffix": "", "command_suffix": "", "states": [], "commands": []}, retain = False):
         super().__init__()
         self.mqtt = mqtt
 
         self.topic = topic
         self.protocol = protocol
         self.name = f"MQTTDevice<{topic}>"
+        self.retain = retain
         
         # Register the listener for state updates
         self.mqtt.topics.add(topic)
@@ -59,7 +60,8 @@ class MQTTDevice(Connector):
         command_topic = f"{self.topic}{self.protocol['command_suffix']}"
 
         logger.info("Setting %s to %s", command_topic, message)
-        self.mqtt.send(topic=command_topic, message=message)
+        self.mqtt.send(topic=command_topic, message=message, retain = self.retain)
+
 
 
 class UserPresense:
@@ -71,14 +73,13 @@ class UserPresense:
         self.outside_reset_time = outside_reset_time
         self.outside_distance = outside_distance
 
-        self.inside = Connector(f"{name}.inside")
-        self.inside.on_set(lambda value: self.mqtt.send(f"presense/{self.name}/inside", "true" if value else "false", retain=True) )
-        self.outside = Connector(f"{name}.outside")
-        self.outside.on_set(lambda value: self.mqtt.send(f"presense/{self.name}/outside", "true" if value else "false", retain=True) )
+        bool_protocol = {"state_suffix": "", "command_suffix": "", "states": ["false","true"], "commands": ["false", "true"]}
+        self.inside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/inside", protocol=bool_protocol, retain=True)
+        self.outside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/outside", protocol=bool_protocol, retain=True)
 
         self.timer = None
 
-    def parse_message(self, room, message):
+    def parse_esp32_message(self, room, message):
         if room == self.inside_room:
             self.inside.set(True)
         elif room == self.outside_room:
@@ -118,51 +119,36 @@ class ESPresense(Service):
         # Register the listener for state updates
         self.mqtt.topics.add(f"espresense/devices")
         self.listener = self.mqtt.listener.filter(f"espresense/devices/(?P<name>[^/]*)/(?P<room>{inside_room}{f'|{outside_room}' if outside_room else ''}) (?P<message>.*)", log=False)
-        self.listener.register(self._on_state_update)
-
-        self.mqtt.topics.add(f"presense")
-        self.override_listener = self.mqtt.listener.filter(f"presense/(?P<name>[^/]*)/inside (?P<status>true|false)", log=False)
-        self.override_listener.register(lambda line,match: self._get_sensor(match["name"]).inside.set(match["status"] == "true"))
-
+        self.listener.register(self._on_esp32_update)
 
         self.anybody = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room)
         
     def __getattr__(self, name):
         return self._get_sensor(name)
-        # if name in self.sensors:
-        #     return lambda: self.sensors[name]
+
     def device(self,name):
         return self._get_sensor(name)
         
     def _get_sensor(self,name):
         if name not in self.sensors:
             self.sensors[name]  = UserPresense(self.mqtt, name, self.inside_room, self.outside_room, self.outside_reset_time, self.outside_distance)
-            self.sensors[name].inside.on_set(self.sensor_updated)
-            self.sensors[name].outside.on_set(self.sensor_updated)
+            self.sensors[name].inside.on_set(self.update_anybody_sensor)
+            self.sensors[name].outside.on_set(self.update_anybody_sensor)
+
         return self.sensors[name]
         
-    def sensor_updated(self, value):
+    def update_anybody_sensor(self, value):
         self.anybody.outside.set(any(sensor.outside.get() for sensor in self.sensors.values()))
         self.anybody.inside.set(any(sensor.inside.get() for sensor in self.sensors.values()))
+        
+    def _on_esp32_update(self, line: str, match: dict):
+        """Handle espresenses state updates received from MQTT"""
+        try:
+            sensor = self._get_sensor(match["name"])
+            sensor.parse_esp32_message(match["room"], match["message"])
+        except ValueError:
+            logger.warning("Problematic espresense line: '%s' (Match: %s)", line, match)
 
-    def _on_state_update(self, line: str, match: dict):
-        """Handle state updates from MQTT"""
-        try:
-            sensor = self._get_sensor(match["name"])
-            sensor.parse_message(match["room"], match["message"])
-        except ValueError:
-            logger.warning("Unrecognized state '%s' for device %s", match, self.topic)
-            self.set(match, act=False)
-            
-    def _on_status_override(self, line: str, match: dict):
-        """Handle state updates from MQTT"""
-        try:
-            logger.debug("on_status_override %s %s", line, match)
-            sensor = self._get_sensor(match["name"])
-            sensor.parse_message(match["room"], match["message"])
-        except ValueError:
-            logger.warning("Unrecognized state '%s' for device %s", match, self.topic)
-            self.set(match, act=False)
 
 class MQTT(Service):
     def __init__(self, host: str, username: str, password: str, protocols = mqtt_protocols):
@@ -188,10 +174,11 @@ class MQTT(Service):
     
 
     def device(self, topic: str, protocol: str = "plain") -> MQTTDevice:
-        return MQTTDevice(self, topic, self.protocols[protocol] if protocol else mqtt_protocols["plain"])
-
+        protocol = self.protocols.get(protocol)
+        return MQTTDevice(self, topic, protocol)
+        
     def send(self, topic: str, message: str, retain = False):
-        logger.info("Sending MQTT command: topic=%s message=%s", topic, message)
+        logger.debug("Sending MQTT command: topic=%s message=%s", topic, message)
         cmd = f'mosquitto_pub -h {self.host} -u {self.username} -P {self.password} -t "{topic}" -m "{message}" {"-r" if retain else ""}'
         subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
     

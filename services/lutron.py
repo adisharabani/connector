@@ -112,6 +112,22 @@ class ToggleCommand(LutronConnector):
         if cmd is not None:
             self.lutron.send_command(cmd)
 
+class LutronPattern(LutronConnector):
+    def __init__(self, lutron: 'Lutron', pattern: str):
+        super().__init__()  # Initialize with no value
+        self.lutron = lutron
+        self.pattern = pattern
+        self.name = f"LutronSysvar<{pattern}>"
+        self.lutron.register_handler(self)
+          
+    def process_event(self, line: str) -> None:
+        """Process SYSVAR events for this sysvar."""
+        # SYSVAR event: ~SYSVAR,sysvar_id,1,value
+        if m := re.match(self.pattern, line):
+            value = m.groups()[0] if m.groups() else m.string
+            self.set(value, act=False)
+            return True
+        
 class Lutron(Service):
     def __init__(self, host: str, port: int, username: str, password: str):
         """Initialize a Lutron connection."""
@@ -229,6 +245,9 @@ class Lutron(Service):
 
     def keypad(self, id: int, button: int, action: int = 1):
         return self.toggle(f'#DEVICE,{id},{button},9,{action}', f'#DEVICE,{id},{button},9,0')
+    
+    def pattern(self, pattern: str):
+        return LutronPattern(self, pattern)
 
     def stop(self):
         """Stop the listener and clean up resources."""

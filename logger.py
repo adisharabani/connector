@@ -1,12 +1,13 @@
 #!/usr/bin/python3
 
 import logging
+from logging import DEBUG, INFO, WARNING, ERROR
 import sys
 
-def setup_logger():
+def setup_logger(level=logging.DEBUG):
     """Configure the root logger to log INFO and above messages."""
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=level,
         format='%(name)s:%(levelname)s:%(message)s',
         datefmt='%H:%M:%S',
         stream=sys.stdout

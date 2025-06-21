@@ -1,10 +1,10 @@
 import time
 
-from logger import setup_logger, get_logger
+from logger import setup_logger, get_logger, DEBUG, INFO, WARNING, ERROR
 from services import *  # This will import all services defined in services/__init__.py
 from config import Configurator
 
-# Setup logging
+# Setup logging0
 setup_logger()
 logger = get_logger(__name__)
 logger.info("Starting home automation connector")

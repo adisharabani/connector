@@ -19,6 +19,9 @@ from google.cloud import texttospeech
 from google.oauth2 import service_account
 from typing import Optional, Dict, Any
 
+from pytimeparse.timeparse import timeparse
+
+
 # Get logger for this module
 logger = get_logger(__name__)
 
@@ -39,13 +42,7 @@ class GoogleTTSConnector(Connector):
             if not value:
                 return
             # Get processed audio directly from synthesize_speech
-            audio_data = self.tts.synthesize_speech(self.text)
-            
-            # Play the processed audio on HomePod using pipes
-            cmd = ['./services/libraop/build/raop_play-linux-aarch64', self.tts.homepod_ip, "-v", str(self.tts.volume), "-"]
-            logger.info(f"Playing audio on HomePod {self.tts.homepod_ip} {self.tts.volume}")
-            process = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-            process.communicate(input=audio_data)
+            self.tts.speak(self.text)
             
         except Exception as e:
             logger.error(f"Error in TTS playback: {str(e)}")
@@ -56,7 +53,7 @@ class GoogleTTSConnector(Connector):
 class GoogleTTS(Service):
     """Service for Google Cloud Text-to-Speech integration."""
     
-    def __init__(self, homepod_ip: str, volume: 80, credentials: Optional[Dict[str, Any]] = None, credentials_file: Optional[str] = None):
+    def __init__(self, homepod_ip: str, volume: 80, play_command: str = './services/libraop/build/raop_play-linux-aarch64', credentials: Optional[Dict[str, Any]] = None, credentials_file: Optional[str] = None, after="00:00", before= "24:00"):
         """
         Initialize Google TTS service.
         
@@ -72,6 +69,9 @@ class GoogleTTS(Service):
 
         self.homepod_ip = homepod_ip
         self.volume = volume
+        self.play_command = play_command
+        self.after = timeparse(after, granularity="minutes")
+        self.before = timeparse(before, granularity="minutes")
         
         # Initialize credentials if provided
         if credentials:
@@ -165,6 +165,16 @@ class GoogleTTS(Service):
     def device(self, text: str) -> GoogleTTSConnector:
         """Create a new TTS connector for a specific HomePod."""
         return GoogleTTSConnector(self, text)
+
+    def speak(self, text: str):
+        audio_data = self.synthesize_speech(text)
+        
+        # Play the processed audio on HomePod using pipes
+        cmd = [self.play_command, self.homepod_ip, "-v", str(self.volume), "-"]
+        logger.info(f"Playing audio on HomePod {self.homepod_ip} {self.volume}")
+        process = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        process.communicate(input=audio_data)
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

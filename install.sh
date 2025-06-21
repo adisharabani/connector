@@ -16,17 +16,30 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "Installing system dependencies..."
-apt install mosquitto-clients raop_play
+apt install mosquitto-clients
 #apt install -y netcat python3-venv python3-full
 
 echo "Creating system-wide virtual environment in /opt/connector..."
 python3 -m venv /opt/connector
 
 echo "Installing Python dependencies..."
-/opt/connector/bin/pip install pyyaml google-cloud-texttospeech
+/opt/connector/bin/pip install pyyaml google-cloud-texttospeech pytimeparse
 
 echo "Making main.py executable..."
 chmod +x "$SCRIPT_DIR/main.py"
+
+
+#build raop_play
+orig_dir="$PWD"
+cd "$SCRIPT_DIR/services/libraop/"
+apt-get install build-essential cmake  libssl-dev
+git submodule update --force --recursive --init --remote
+mkdir -p build
+cd build
+cmake ..
+make
+cd $orig_dir
+
 
 # Create the systemd service file
 echo "Creating systemd service file..."

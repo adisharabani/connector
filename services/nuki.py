@@ -3,7 +3,10 @@
 import subprocess
 from .connector import Connector
 from .service import Service
+from shell_listener import ShellListener
+
 from logger import get_logger
+import threading
 
 logger = get_logger(__name__)
 
@@ -56,16 +59,43 @@ class NukiDevice(Connector):
         """Get a NukiAutoLock instance for this device"""
         return NukiAutoLock(self.nuki, self.nuki_id)
 
+class NukiBridge(Connector):
+    def __init__(self, nuki: 'Nuki', ip: str):
+        super().__init__()  # Initialize with no value
+        self._value = True
+        self.nuki = nuki
+        self.ip = ip
+        self.name = f"NukiBridge<{ip}>"
+        self.listener = ShellListener(f"(while true; do curl -sS 'http://{ip}:8080/auth' && echo '' || (echo 'nuki bridge error' >& 2; sleep 5;); sleep 1; done)")
+
+        self.buttonListener = self.listener.filter("(true)")
+        self.buttonListener.register(self.on_press)
+
+        logger.info("Starting Nuki Bridge listener for %s:8080", self.ip)
+        self.listener.start()
+        
+    
+    def on_press(self, line, match):
+        self.notify_set()
+        # threading.Timer(5, lambda: self.set(False)).start()
+        
+        
 class Nuki(Service):
     def __init__(self, api_key: str):
         super().__init__()
         self.api_key = api_key
+        self.bridges = {}
     
     def CMD(self,cmd=""):
         return 
 
     def device(self, nuki_id: str) -> NukiDevice:
         return NukiDevice(self,nuki_id)
+
+    def bridge(self,bridge_ip):
+        if bridge_ip not in self.bridges:
+            self.bridges[bridge_ip] = NukiBridge(self, bridge_ip)
+        return self.bridges[bridge_ip]
 
     def reduct(self,x):
         return x.replace(self.api_key,"<API_KEY>")

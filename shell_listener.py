@@ -108,7 +108,7 @@ class ShellListener(FilterAnalyzer):
                     if not line and self.process.poll() is not None:
                         break
                     if line:
-                        # logger.debug("Processing Line: %s", line)
+                        #logger.debug("Processing Line: %s", line)
                         if self._process_line(line):
                             logger.debug("Shell line: %s", line)
 
