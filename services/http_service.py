@@ -4,6 +4,8 @@ from .connector import Connector
 from logger import get_logger
 from threading import Thread
 logger = get_logger(__name__)
+import logging
+import urllib3
 
 class HTTPRequestConnector(Connector):
     def __init__(self, url, method: str = "GET", headers: dict = None, body: str = None, debug=False):
@@ -35,6 +37,7 @@ class HTTP(Service):
     def __init__(self,debug=False):
         super().__init__()
         self.debug = debug
+        logging.getLogger("urllib3").setLevel(logging.DEBUG if debug else logging.WARNING)
 
     def device(self, url, method: str = "GET", headers: dict = None, body: str = None) -> Connector:
         """
