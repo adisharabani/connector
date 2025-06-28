@@ -27,9 +27,10 @@ class Connector:
     
     """
     
-    def __init__(self, name=None):
+    def __init__(self, name=None, process_same_value_events = None):
         self.name = name or f"{self.__class__.__name__}<{id(self)}>"
-        logger.debug(f"Connector created: {self.name}")
+        self.process_same_value_events = process_same_value_events if process_same_value_events is not None else False
+        logger.debug(f"Connector created: {self.name} {'Will process same value events' if self.process_same_value_events else ''}")
         self._value = None
         self._listeners: List[Callable[[Any], None]] = []
     
@@ -41,7 +42,8 @@ class Connector:
         pass
     
     def set(self, value: Any, act=True) -> bool:
-        if value != self._value:
+        #dismiss if same value
+        if self.process_same_value_events or value != self._value:
             original_value = self._value
             self._value = value
             if act: self._set_action(value)
@@ -73,36 +75,51 @@ class Connector:
         other_connector.on_set(self.set)
         
     def to_json(self):
-        return Lambda(self, lambda v: json.loads(v), lambda v:json.dumps(v))
+        ret = Lambda(self, lambda v: json.loads(v), lambda v:json.dumps(v))
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
 
     def inverse(self):
-        return Lambda(self, lambda v: not v, lambda v: not v)
-        #return Inverse(self)
+        ret = Lambda(self, lambda v: not v, lambda v: not v)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
 
     def once(self, interval=None):
-        return Once(self,interval=interval)
+        ret = Once(self,interval=interval)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
 
     def map(self, cmd):
         cmd = eval(f"lambda value: {cmd}")
-        return Lambda(self, cmd)
+        ret = Lambda(self, cmd)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
 
     def filter(self, cmd="value"):
         cmd = eval(f"lambda value: {cmd}")
         fcmd = lambda v:v if cmd(v) else None 
-        return Lambda(self, fcmd, fcmd)
+        ret = Lambda(self, fcmd, fcmd)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
     
     def before(self, end):
         end = timeparse(end, granularity="minutes")
         cmd = lambda v: (datetime.now() - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() < end
-        return Lambda(self, cmd, cmd)
+        ret = Lambda(self, cmd, cmd)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
 
     def after(self, start):
         start = timeparse(start, granularity="minutes")
         cmd = lambda v: start < (datetime.now() - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() 
-        return Lambda(self, cmd, cmd)
+        ret = Lambda(self, cmd, cmd)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
     
     def toggle(self):
-        return Toggle(self)
+        ret = Toggle(self)
+        ret.process_same_value_events = self.process_same_value_events
+        return ret
 
 class Lambda(Connector):
     def __init__(self, source: Connector, cmd, reversed_cmd=None):

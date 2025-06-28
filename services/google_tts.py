@@ -29,7 +29,7 @@ class GoogleTTSConnector(Connector):
     """Connector for Google Text-to-Speech that sends audio to a HomePod via raop_play."""
     
     def __init__(self, tts: 'GoogleTTS', text: str):
-        super().__init__()
+        super().__init__(process_same_value_events=True)
         logger.info(f"TTS Connector created for {text=}")
         self.tts = tts
         self.text = text

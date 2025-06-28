@@ -29,13 +29,12 @@ mqtt_protocols = {  "plain": {
                 }
 
 class MQTTDevice(Connector):
-    def __init__(self, mqtt: 'MQTT', topic: str, protocol = {"state_suffix": "", "command_suffix": "", "states": [], "commands": []}, retain = False):
-        super().__init__()
+    def __init__(self, mqtt: 'MQTT', topic: str, protocol = {"state_suffix": "", "command_suffix": "", "states": [], "commands": []}, retain = False, process_same_value_events = False):
+        super().__init__(name = f"MQTTDevice<{topic}>", process_same_value_events = process_same_value_events)
         self.mqtt = mqtt
 
         self.topic = topic
         self.protocol = protocol
-        self.name = f"MQTTDevice<{topic}>"
         self.retain = retain
         
         # Register the listener for state updates
@@ -173,9 +172,9 @@ class MQTT(Service):
             logger.error("No devices/topics found so no need to start MQTT service")
     
 
-    def device(self, topic: str, protocol: str = "plain") -> MQTTDevice:
-        protocol = self.protocols.get(protocol)
-        return MQTTDevice(self, topic, protocol)
+    def device(self, topic: str, protocol: str = None, process_same_value_events = None) -> MQTTDevice:
+        protocol = self.protocols.get(protocol) if protocol is not None else {"state_suffix": "", "command_suffix": "", "states": [], "commands": []}
+        return MQTTDevice(self, topic, protocol, process_same_value_events=process_same_value_events)
         
     def send(self, topic: str, message: str, retain = False):
         logger.debug("Sending MQTT command: topic=%s message=%s", topic, message)
