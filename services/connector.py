@@ -44,6 +44,7 @@ class Connector:
     def set(self, value: Any, act=True) -> bool:
         #dismiss if same value
         if self.process_same_value_events or value != self._value:
+            #logger.debug(f"{self.name}.set({value=}, {act=})")
             original_value = self._value
             self._value = value
             if act: self._set_action(value)
@@ -61,6 +62,7 @@ class Connector:
             listener(self._value)
             
     def on_set(self, callback: Callable[[Any], None], filter=None) -> None:
+        #logger.debug(f"{self.name}.on_set({filter=})")
         # call this when you want to bind something to the changes of this Connector
         self._listeners.append(lambda val, filter=filter, callback=callback: (filter==None or val in filter) and callback(val))
         # If we already have a value, call the callback immediately
@@ -131,11 +133,13 @@ class Lambda(Connector):
         self._source.on_set(self._act)
 
     def _act(self, value):
+        #logger.debug(f"{self.name}._act({value=})")
         lvalue = self._cmd(value)
         #if lvalue is not None:
         self.set(lvalue, act=False)
 
     def _set_action(self, value: Any) -> None:
+        #logger.debug(f"{self.name}._set_action({value=})")
         # When our value changes, update the source with the opposite value
         if self._reversed_cmd:
             rvalue = self._reversed_cmd(value)
@@ -177,6 +181,7 @@ class Once(Connector):
         self._timer = None
 
     def _act(self, value):
+        #logger.debug(f"{self.name}._act({value=})")
         if value:
             if self._timer is None:
                 self.set(value, act=False)
@@ -188,11 +193,12 @@ class Once(Connector):
             self.set(value, act=False)
 
     def _set_action(self, value: Any):
+        #logger.debug(f"{self.name}._set_action({value=})")
         if value:
             if self._timer is None:
                 self._source.set(value)
                 if self._seconds:
-                    self._timer = threading.Timer(self._seconds, lambda: self._stop_timer() or self._source.set(False))
+                    self._timer = threading.Timer(self._seconds, lambda: self._stop_timer())#XXX# or self._source.set(False))
                     self._timer.start()
         else:
             #self._stop_timer(value)

@@ -27,7 +27,7 @@ class HTTPRequestConnector(Connector):
                 self.method,
                 self.url,
                 headers=self.headers,
-                data=value
+                data=str(value)
             )
             if self.debug: logger.info(f"HTTP response: {response.status_code} {response.text}")
         except Exception as e:

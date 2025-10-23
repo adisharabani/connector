@@ -99,11 +99,11 @@ class Sequencer:
         logger.info(f"Sequence set: {' -> '.join([x.name for x in controllers])}")
     def set(self,value,index):
         logger.debug(f"Sequence {value=} {index=} {self.state=}")
-        if index == self.state-1 and value is None:
+        if index == self.state-1 and value is not None:
             self.state = index
             logger.debug(f"Sequence state reset {self.state=}")
             # pass
-        elif index == self.state and value is not None:
+        elif index == self.state and value is not None and value:
             self.state+=1
             logger.debug(f"Sequence state increased {self.state=}")
             if self.state==len(self.controllers)-1:
