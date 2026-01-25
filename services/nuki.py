@@ -7,6 +7,9 @@ from shell_listener import ShellListener
 
 from logger import get_logger
 import threading
+import requests
+import traceback
+
 
 logger = get_logger(__name__)
 
@@ -59,12 +62,34 @@ class NukiDevice(Connector):
         """Get a NukiAutoLock instance for this device"""
         return NukiAutoLock(self.nuki, self.nuki_id)
 
+
+class NukiBridgedDevice(Connector):
+    def __init__(self, bridge: 'NukiBridge', nuki_id: str):
+        super().__init__()  # Initialize with no value
+        self.bridge = bridge
+        self.nuki_id = nuki_id
+        self.name = f"NukiBridgedDevice<{nuki_id}>"
+        self._sensor = NukiBridgedSensor(self)
+        self.set(False)
+
+    def sensor(self):
+        return self._sensor
+
+class NukiBridgedSensor(Connector):
+    def __init__(self, device: NukiBridgedDevice):
+        super().__init__()  # Initialize with no value
+        self.device = device
+        self.name = f"NukiBridgedSensor<{device.nuki_id}>"
+        self.set(False)
+
+
 class NukiBridge(Connector):
-    def __init__(self, nuki: 'Nuki', ip: str):
+    def __init__(self, nuki: 'Nuki', ip: str, token: str):
         super().__init__()  # Initialize with no value
         self._value = True
         self.nuki = nuki
         self.ip = ip
+        self.token = token
         self.name = f"NukiBridge<{ip}>"
         self.listener = ShellListener(f"(while true; do curl -sS 'http://{ip}:8080/auth' && echo '' || (echo 'nuki bridge error' >& 2; sleep 5;); sleep 1; done)")
 
@@ -73,7 +98,37 @@ class NukiBridge(Connector):
 
         logger.info("Starting Nuki Bridge listener for %s:8080", self.ip)
         self.listener.start()
+
+        self.devices = {}
+        self._data_url = f"http://{self.ip}:8080/list?token={self.token}"
+        self.update_data_loop() 
+
+    def update_data_loop(self):
+        try:
+            # logger.info(f"doorsensorState")
+            response = requests.get(self._data_url, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            for d in data:
+                nukiId = d["nukiId"]
+                d = d.get("lastKnownState",{})
+                if nukiId in self.devices:
+                    # logger.info(f"{d=}")
+                    self.devices[nukiId].set(d.get("state") !=3) #(3) locked ---> false
+                    if "doorsensorState" in d:
+                        # logger.info(f"doorsensorState -> {d.get('doorsensorState') != 2}")
+                        self.devices[nukiId]._sensor.set(d.get('doorsensorState') != 2) #(2) closed ---> false
+        except Exception as e:
+            logger.exception(f"Exception in update_data_loop: {e}")
+        finally:
+            # schedule next call after 10 seconds
+            threading.Timer(15, self.update_data_loop).start()            
         
+    
+    def device(self, nuki_id: str) -> NukiBridgedDevice:
+        if nuki_id not in self.devices: 
+            self.devices[nuki_id] = NukiBridgedDevice(self, nuki_id)
+        return self.devices[nuki_id]
     
     def on_press(self, line, match):
         self.notify_set()
@@ -81,10 +136,12 @@ class NukiBridge(Connector):
         
         
 class Nuki(Service):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, token: str):
         super().__init__()
         self.api_key = api_key
+        self.token = token
         self.bridges = {}
+
     
     def CMD(self,cmd=""):
         return 
@@ -94,7 +151,7 @@ class Nuki(Service):
 
     def bridge(self,bridge_ip):
         if bridge_ip not in self.bridges:
-            self.bridges[bridge_ip] = NukiBridge(self, bridge_ip)
+            self.bridges[bridge_ip] = NukiBridge(self, bridge_ip, self.token)
         return self.bridges[bridge_ip]
 
     def reduct(self,x):

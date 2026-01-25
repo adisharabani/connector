@@ -17,7 +17,7 @@ class Configurator:
         
         # Initialize services
         self.services = self._load_services()
-        self.bind_connectors()
+        self.connectors = self.bind_connectors()
         self.start_services()
         
     def _load_services(self) -> Dict[str, Any]:
@@ -65,17 +65,23 @@ class Configurator:
     def bind_connectors(self):
         """Execute all bindings from the config."""
         logger.info("Binding Connectors")
+        connectors = []
         for binding in self.config['bindings']:
             # Get binding type (sync or one_waycontrollers
             # filter = binding.get("filter")
             one_way = binding.get("direction") == "one-way"
             sequence = binding.get("direction") == "sequence"
+            condition = binding.get("direction") == "condition"
 
             controllers = [self._get_bindable_object(x) for x in binding["binding"]]
+            connectors.append(controllers)
 
             if sequence:
-                self.sequences= Sequencer(controllers)
-
+                connectors.append(Sequencer(controllers))
+            elif condition:
+                controllers[0].on_set(lambda value, controllers=controllers: all(c.get() for c in controllers[1:-1]) and controllers[-1].set(value))
+                # controllers[0].on_set(lambda value, controllers=controllers: controllers[-1].set(value))
+                logger.info(f"Condition set: {controllers[0].name} if {' & '.join([x.name for x in controllers[1:-1]])} --> {controllers[-1].name}")
             else:
                 for source, target in zip(controllers, controllers[1:]):
                     source.on_set(target.set)#, filter=filter)
@@ -84,6 +90,7 @@ class Configurator:
                         target.on_set(source.set)#, filter=filter)
                     
                     logger.info(f"Binding set: {source.name} {'-->' if one_way else '<-->' } {target.name}")
+        return connectors
 
     def start_services(self):
         logger.info("Starting Services")
@@ -101,7 +108,7 @@ class Sequencer:
         logger.debug(f"Sequence {value=} {index=} {self.state=}")
         if index == self.state-1 and value is not None:
             self.state = index
-            logger.debug(f"Sequence state reset {self.state=}")
+            logger.debug(f"Sequence state decreased {self.state=}")
             # pass
         elif index == self.state and value is not None and value:
             self.state+=1
@@ -110,6 +117,11 @@ class Sequencer:
                 logger.debug(f"Sequence completed")
                 self.state = 0
                 self.controllers[-1].set(value)
+            else:
+                g = self.controllers[self.state].get()
+                logger.info(f"{self.controllers[self.state].name}.get() = {g}")
+                if (g):
+                    self.controllers[self.state].set(g)
 
 
 

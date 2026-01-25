@@ -35,12 +35,16 @@ class Connector:
         self._listeners: List[Callable[[Any], None]] = []
     
     def get(self) -> Any:
-        return self._value
+        return self._get_action(self._value)
     
     def _set_action(self, value: Any) -> None:
         # Override to add code to be executed when the connector is set by someone
         pass
     
+    def _get_action(self, value: Any) -> None:
+        # Override to add code to be executed when the connector is trying to get its value
+        return value
+
     def set(self, value: Any, act=True) -> bool:
         #dismiss if same value
         if self.process_same_value_events or value != self._value:
@@ -128,7 +132,7 @@ class Lambda(Connector):
         super().__init__()
         self._cmd = cmd
         self._reversed_cmd = reversed_cmd
-        self.name = f"{source.name}.{cmd.__qualname__.split('.')[1]}"
+        self.name = f"{source.name}.{cmd.__qualname__.split('.')[-1]}"
         self._source = source 
         self._source.on_set(self._act)
 

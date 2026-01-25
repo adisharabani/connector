@@ -105,7 +105,7 @@ class UserPresense:
 
 
 class ESPresense(Service):
-    def __init__(self, service: 'MQTT', inside_room, outside_room, outside_reset_time=3, outside_distance=4):
+    def __init__(self, service: 'MQTT', inside_room, outside_room, outside_reset_time=3, outside_distance=3):
         logger.info(f"Creating ESPresense (Inside room: {inside_room}, Outside room: {outside_room})")
         self.mqtt = service
         self.inside_room = inside_room

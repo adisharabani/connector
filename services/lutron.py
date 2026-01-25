@@ -117,11 +117,11 @@ class LutronPattern(LutronConnector):
         super().__init__()  # Initialize with no value
         self.lutron = lutron
         self.pattern = pattern
-        self.name = f"LutronSysvar<{pattern}>"
+        self.name = f"LutronPattern<{pattern}>"
         self.lutron.register_handler(self)
           
     def process_event(self, line: str) -> None:
-        """Process SYSVAR events for this sysvar."""
+        """Process Lutron events for this pattern."""
         # SYSVAR event: ~SYSVAR,sysvar_id,1,value
         if m := re.match(self.pattern, line):
             value = m.groups()[0] if m.groups() else m.string
