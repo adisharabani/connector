@@ -117,6 +117,7 @@ class ESPresense(Service):
         
         # Register the listener for state updates
         self.mqtt.topics.add(f"espresense/devices")
+        self.mqtt.topics.add(f"^presense")
         self.listener = self.mqtt.listener.filter(f"espresense/devices/(?P<name>[^/]*)/(?P<room>{inside_room}{f'|{outside_room}' if outside_room else ''}) (?P<message>.*)", log=False)
         self.listener.register(self._on_esp32_update)
 
