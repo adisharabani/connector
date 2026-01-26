@@ -9,6 +9,7 @@ import time
 # Get logger for this module
 logger = get_logger(__name__)
 
+
 class Configurator:
     def __init__(self, config_path: str):
         logger.info("Analyzing config file")

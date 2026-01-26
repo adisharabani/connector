@@ -1,18 +1,18 @@
+#! /opt/connector/bin/python
+
 import time
 
 from logger import setup_logger, get_logger, DEBUG, INFO, WARNING, ERROR
 from services import *  # This will import all services defined in services/__init__.py
 from config import Configurator
 
-# Setup logging0
+# Setup logging
 setup_logger()
 logger = get_logger(__name__)
 logger.info("Starting home automation connector")
 
-
 def main():
     configurator = Configurator('data/config.yaml')
-    
     logger.info("Press Ctrl+C to exit...")
     try:
         while True:
@@ -24,4 +24,5 @@ def main():
         logger.info("Done!")
 
 if __name__ == "__main__":
+    
     main() 
