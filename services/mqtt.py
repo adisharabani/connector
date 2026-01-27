@@ -80,17 +80,17 @@ class UserPresense:
 
     def parse_esp32_message(self, room, message):
         if room == self.inside_room:
-            self.inside.set(True)
+            self.inside.set(1)
         elif room == self.outside_room:
             message = json.loads(message)
             # If not home, than we are definitely outside
             if not self.inside.get(): 
-                self.outside.set(True)
+                self.outside.set(1)
                 
             # If we are home, then we are outside only if we are close to the outside sensor
             elif self.outside_distance is None or message["distance"] < self.outside_distance:
-                self.inside.set(False)
-                self.outside.set(True)    
+                self.inside.set(0)
+                self.outside.set(1)    
 
             self.reset_outside_timer()
 
@@ -99,7 +99,7 @@ class UserPresense:
             self.timer.cancel()
             self.timer = None
         if self.outside_reset_time and self.outside.get():
-            self.timer = threading.Timer(self.outside_reset_time, lambda: self.outside.set(False))
+            self.timer = threading.Timer(self.outside_reset_time, lambda: self.outside.set(0))
             self.timer.start()
 
 
@@ -116,8 +116,10 @@ class ESPresense(Service):
 
         self.sensors = {}
 
-        self.anybody = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room, retain=False)
-        
+        self.sensors["anybody"]  = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room, retain=False)
+        self.sensors["anybody"].inside.set(0, act=False)
+        self.sensors["anybody"].outside.set(0, act=False)
+
         # Register the listener for state updates
         self.mqtt.topics.add(f"espresense/devices")
         self.mqtt.topics.add(f"^presense")
@@ -148,8 +150,8 @@ class ESPresense(Service):
         return self.sensors[name]
         
     def update_anybody_sensor(self, value):
-        self.anybody.outside.set(any(sensor.outside.get() for sensor in self.sensors.values()))
-        self.anybody.inside.set(any(sensor.inside.get() for sensor in self.sensors.values()))
+        self.anybody.outside.set(1 if any(sensor.outside.get() for sensor in self.sensors.values()) else 0)
+        self.anybody.inside.set(1 if any(sensor.inside.get() for sensor in self.sensors.values()) else 0)
         
     def _on_esp32_update(self, line: str, match: dict):
         """Handle espresenses state updates received from MQTT"""
@@ -164,11 +166,11 @@ class ESPresense(Service):
         try:
             sensor = self._get_sensor(match["name"])
             if match["location"] == "inside" and sensor.inside.get() is None:
-                sensor.inside.set(match["state"] == "true", act=False)
-                logger.info("Initialized inside sensor for %s to %s", sensor.name, match["state"])
+                sensor.inside.set(1 if match["state"] == "true" else 0, act=False)
+                logger.info("Initialized inside sensor for %s to %s (%s)", sensor.name, match["state"]=="true", match["state"])
             elif match["location"] == "outside" and sensor.outside.get() is None:
-                sensor.outside.set(match["state"] == "true", act=False)
-                logger.info("Initialized outside sensor for %s to %s", sensor.name, match["state"])
+                sensor.outside.set(1 if match["state"] == "true" else 0, act=False)
+                logger.info("Initialized outside sensor for %s to %s (%s)", sensor.name, match["state"]=="true", match["state"])
         except ValueError:
             logger.warning("Problematic presense line: '%s' (Match: %s)", line, match)
 
