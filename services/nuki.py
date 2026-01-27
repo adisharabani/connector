@@ -175,7 +175,7 @@ class NukiBridge(Connector):
         # Start callback server and register with bridge
         self._start_callback_server()
         
-        self.update_data()
+        self.update_data_loop()
     
     def _get_local_ip(self):
         """Get the local IP address on the same network as the bridge"""
@@ -265,7 +265,8 @@ class NukiBridge(Connector):
         except Exception as e:
             logger.exception("Failed to register callback with bridge: %s", e) 
 
-    def update_data(self):
+    def update_data_loop(self):
+        logger.info(f"Updating data for {self.name}")
         try:
             # logger.info(f"doorsensorState")
             response = requests.get(f"http://{self.ip}:8080/list?token={self.token}", timeout=5)
@@ -275,11 +276,10 @@ class NukiBridge(Connector):
                 self.update_device_data(d)
 
         except Exception as e:
-            logger.exception(f"Exception in update_data: {e}")
+            logger.exception(f"Exception in update_data_loop: {e}")
         finally:
-            # schedule next call after 30 seconds
-            #threading.Timer(30, self.update_data_loop).start()            
-            pass
+            # schedule next call after 5 minutes
+            threading.Timer(5*60, self.update_data_loop).start()            
         
     
     def device(self, nuki_id: str, name = None) -> NukiBridgedDevice:
@@ -325,12 +325,13 @@ class NukiBridge(Connector):
         
         
 class Nuki(Service):
-    def __init__(self, api_key: str, token: str, listen_for_buttons = False):
+    def __init__(self, api_key: str, token: str, listen_for_buttons = False, bridge_ip=None):
         logger.info(f"Nuki service created {api_key=} {token=}")
         super().__init__()
         self.api_key = api_key
         self.token = token
         self.bridges = {}
+        self.default_bridge_ip = bridge_ip
         self.listen_for_buttons = listen_for_buttons
 
     
@@ -340,7 +341,9 @@ class Nuki(Service):
     def device(self, nuki_id: str) -> NukiDevice:
         return NukiDevice(self,nuki_id)
 
-    def bridge(self,bridge_ip):
+    def bridge(self,bridge_ip=None):
+        if bridge_ip is None:
+            bridge_ip = self.default_bridge_ip
         if bridge_ip not in self.bridges:
             self.bridges[bridge_ip] = NukiBridge(self, bridge_ip, self.token, listen_for_buttons=self.listen_for_buttons)
         return self.bridges[bridge_ip]
