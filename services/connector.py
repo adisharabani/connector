@@ -96,28 +96,32 @@ class Connector:
         return ret
 
     def map(self, cmd):
-        cmd = eval(f"lambda value: {cmd}")
-        ret = Lambda(self, cmd)
+        cmd_function = eval(f"lambda value: {cmd}")
+        cmd_function.desc = cmd
+        ret = Lambda(self, cmd_function)
         ret.process_same_value_events = self.process_same_value_events
         return ret
 
     def filter(self, cmd="value"):
-        cmd = eval(f"lambda value: {cmd}")
-        fcmd = lambda v:v if cmd(v) else None 
-        ret = Lambda(self, fcmd, fcmd)
+        cmd_function = eval(f"lambda value: {cmd}")
+        fcmd_function = lambda v:v if cmd_function(v) else None 
+        fcmd_function.desc = cmd=="value" and "filter" or cmd
+        ret = Lambda(self, fcmd_function, fcmd_function)
         ret.process_same_value_events = self.process_same_value_events
         return ret
     
     def before(self, end):
-        end = timeparse(end, granularity="minutes")
-        cmd = lambda v: (datetime.now() - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() < end
+        end_time = timeparse(end, granularity="minutes")
+        cmd = lambda v: (datetime.now() - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() < end_time
+        cmd.desc = f"before {end}m"
         ret = Lambda(self, cmd, cmd)
         ret.process_same_value_events = self.process_same_value_events
         return ret
 
     def after(self, start):
-        start = timeparse(start, granularity="minutes")
-        cmd = lambda v: start < (datetime.now() - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() 
+        start_time = timeparse(start, granularity="minutes")
+        cmd = lambda v: start_time < (datetime.now() - datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() 
+        cmd.desc = f"after {start}m"
         ret = Lambda(self, cmd, cmd)
         ret.process_same_value_events = self.process_same_value_events
         return ret
@@ -129,10 +133,10 @@ class Connector:
 
 class Lambda(Connector):
     def __init__(self, source: Connector, cmd, reversed_cmd=None):
-        super().__init__()
+        super().__init__(name=f"{source.name}.<{cmd.desc if hasattr(cmd, 'desc') else (cmd.__qualname__+'.'+cmd.__qualname__).split('.')[1]}>")
+        
         self._cmd = cmd
         self._reversed_cmd = reversed_cmd
-        self.name = f"{source.name}.{cmd.__qualname__.split('.')[-1]}"
         self._source = source 
         self._source.on_set(self._act)
 
@@ -152,8 +156,7 @@ class Lambda(Connector):
 
 class Inverse(Connector):
     def __init__(self, source: Connector):
-        super().__init__()
-        self.name = f"Inverse({source.name})"
+        super().__init__(name=f"Inverse({source.name})")
         self._source = source 
         self._source.on_set(lambda val: self.set(not val, act=False))
 
@@ -163,8 +166,7 @@ class Inverse(Connector):
 
 class Toggle(Connector):
     def __init__(self, source: Connector):
-        super().__init__()
-        self.name = f"Toggle({source.name})"
+        super().__init__(name=f"Toggle({source.name})")
         self._source = source 
         self._source.on_set(lambda val: self.set(not self.get(), act=False))
 
@@ -175,8 +177,7 @@ class Toggle(Connector):
 
 class Once(Connector):
     def __init__(self, source: Connector, interval=None):
-        super().__init__()
-        self.name =f"{source.name}.Once({'unlimited' if interval is None else f'{interval}'})"
+        super().__init__(name=f"{source.name}.Once({'unlimited' if interval is None else f'{interval}'})")
         self._source = source
         self._source.on_set(self._act)
         self._seconds  = timeparse(interval) if interval else None

@@ -9,9 +9,12 @@ import time
 # Get logger for this module
 logger = get_logger(__name__)
 
+gc = None
 
 class Configurator:
     def __init__(self, config_path: str):
+        global gc
+        gc = self
         logger.info("Analyzing config file")
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)

@@ -24,10 +24,9 @@ logger = get_logger(__name__)
 
 class NukiAutoLock(Connector):
     def __init__(self, nuki: 'Nuki', nuki_id: str):
-        super().__init__()  # Initialize with no value
+        super().__init__(name=f"NukiAutoLock<{nuki_id}>")  # Initialize with no value
         self.nuki = nuki
         self.nuki_id = nuki_id
-        self.name = f"NukiAutoLock<{nuki_id}>"
     
     def _set_action(self, value: bool) -> None:
         """Set the auto-lock state on Nuki"""
@@ -50,10 +49,9 @@ class NukiAutoLock(Connector):
 
 class NukiDevice(Connector):
     def __init__(self, nuki: 'Nuki', nuki_id: str):
-        super().__init__()  # Initialize with no value
+        super().__init__(name = f"NukiDevice<{nuki_id}>")  # Initialize with no value
         self.nuki = nuki
         self.nuki_id = nuki_id
-        self.name = f"NukiDevice<{nuki_id}>"
     
     def _set_action(self, value: bool) -> None:
         """Set the lock state on Nuki - True for unlock, False for lock"""
@@ -73,23 +71,28 @@ class NukiDevice(Connector):
 
 
 class NukiBridgedDevice(Connector):
-    def __init__(self, bridge: 'NukiBridge', nuki_id: str):
-        super().__init__()  # Initialize with no value
+    def __init__(self, bridge: 'NukiBridge', nuki_id: str, name = None):
         self.bridge = bridge
         self.nuki_id = nuki_id
-        self.name = f"NukiBridgedDevice<{nuki_id}>"
-        self._sensor = NukiBridgedSensor(self)
-        self.set(False)
+        self._name = name
+        self._sensor = NukiBridgedSensor(self, name=name)
+        super().__init__(name = f"NukiDevice<{self._name or self.nuki_id}>")  # Initialize with no value
+
+    def set_name(self, name):
+        self._name = name
+        self.name = f"NukiDevice<{self._name or self.nuki_id}>"
+        self._sensor.name = f"NukiSensor<{self._name or self.nuki_id}>"
+
+    def get_name(self):
+        return self._name
 
     def sensor(self):
         return self._sensor
 
 class NukiBridgedSensor(Connector):
-    def __init__(self, device: NukiBridgedDevice):
-        super().__init__()  # Initialize with no value
+    def __init__(self, device: NukiBridgedDevice, name = None):
+        super().__init__(name = f"NukiSensor<{name or device.nuki_id}>")  # Initialize with no value
         self.device = device
-        self.name = f"NukiBridgedSensor<{device.nuki_id}>"
-        self.set(False)
 
 
 class NukiCallbackHandler(BaseHTTPRequestHandler):
@@ -141,22 +144,8 @@ class NukiCallbackHandler(BaseHTTPRequestHandler):
     def _process_callback(self, data):
         """Process callback data asynchronously"""
         try:
-            nuki_id = data.get("nukiId")
-            if nuki_id:
-                # Get or create device
-                device = self.bridge.device(str(nuki_id))
-                state = data.get("state")
-                
-                # Update device state: state 1 = locked, state 3 = unlocked
-                # We map: locked (1) -> False, unlocked (3) -> True
-                if state is not None:
-                    device.set(state != 1)
-                
-                # Update door sensor state if available
-                if "doorsensorState" in data:
-                    # doorsensorState 2 = closed, 3 = opened
-                    # We map: closed (2) -> False, opened (3) -> True
-                    device._sensor.set(data.get("doorsensorState") != 2)
+            self.bridge.update_device_data(data)
+
         except Exception as e:
             logger.exception("Error processing callback data: %s", e)
     
@@ -166,29 +155,27 @@ class NukiCallbackHandler(BaseHTTPRequestHandler):
 
 
 class NukiBridge(Connector):
-    def __init__(self, nuki: 'Nuki', ip: str, token: str, localport = 18080):
-        super().__init__()  # Initialize with no value
+    def __init__(self, nuki: 'Nuki', ip: str, token: str, localport = 18080, listen_for_buttons = False):
+        super().__init__(name=f"NukiBridge<{ip}>")  # Initialize with no value
         self._value = True
         self.nuki = nuki
         self.ip = ip
         self.localport = localport
         self.token = token
-        self.name = f"NukiBridge<{ip}>"
         self.devices = {}
 
-        self.listener = ShellListener(f"(while true; do curl -sS 'http://{ip}:8080/auth' && echo '' || (echo 'nuki bridge error' >& 2; sleep 5;); sleep 1; done)")
-
-        self.buttonListener = self.listener.filter("(true)")
-        self.buttonListener.register(self.on_press)
-
-        logger.info("Starting Nuki Bridge listener for %s:8080", self.ip)
-        self.listener.start()
+        if listen_for_buttons:
+            logger.info("Starting Nuki Bridge listener for %s:8080", self.ip)
+            self.listener = ShellListener(f"(while true; do curl -sS 'http://{ip}:8080/auth' && echo '' || (echo 'nuki bridge error' >& 2; sleep 5;); sleep 1; done)")
+            self.buttonListener = self.listener.filter("(true)")
+            self.buttonListener.register(self.on_press)
+            self.listener.start()
 
         
         # Start callback server and register with bridge
         self._start_callback_server()
         
-        # self.update_data()
+        self.update_data()
     
     def _get_local_ip(self):
         """Get the local IP address on the same network as the bridge"""
@@ -285,34 +272,52 @@ class NukiBridge(Connector):
             response.raise_for_status()
             data = response.json()
             for d in data:
-                nukiId = str(d["nukiId"])
-                device = self.device(nukiId)
-                state_data = d.get("lastKnownState", {})
-                
-                # Update device state: state 1 = locked, state 3 = unlocked
-                # We map: locked (1) -> False, unlocked (3) -> True
-                state = state_data.get("state")
-                if state is not None:
-                    device.set(state != 1)  # state != 1 means unlocked (True)
-                
-                # Update door sensor state if available
-                if "doorsensorState" in state_data:
-                    # doorsensorState 2 = closed, 3 = opened
-                    # We map: closed (2) -> False, opened (3) -> True
-                    device._sensor.set(state_data.get("doorsensorState") != 2)
+                self.update_device_data(d)
+
         except Exception as e:
-            logger.exception(f"Exception in update_data_loop: {e}")
+            logger.exception(f"Exception in update_data: {e}")
         finally:
             # schedule next call after 30 seconds
             #threading.Timer(30, self.update_data_loop).start()            
             pass
         
     
-    def device(self, nuki_id: str) -> NukiBridgedDevice:
+    def device(self, nuki_id: str, name = None) -> NukiBridgedDevice:
         nuki_id = str(nuki_id)
+        if nuki_id in self.devices and name is None:
+            name = self.devices[nuki_id][0].get_name()
+        device = NukiBridgedDevice(self, nuki_id, name)
+
         if nuki_id not in self.devices: 
-            self.devices[nuki_id] = NukiBridgedDevice(self, nuki_id)
-        return self.devices[nuki_id]
+            self.devices[nuki_id] = []
+        else:
+            # logger.warning(f"Device {nuki_id} already exists, copying data from existing device {self.devices[nuki_id][0].get_name()}")
+            device.set(self.devices[nuki_id][0].get(), act=False)
+            device._sensor.set(self.devices[nuki_id][0]._sensor.get(), act=False)
+
+        self.devices[nuki_id].append(device)
+        return device
+    
+    def update_device_data(self, data: dict):
+        nuki_id = str(data.get("nukiId"))
+        lock_state = data.get("state", data.get("lastKnownState", {}).get("state"))
+        door_sensor_state = data.get("doorsensorState", data.get("lastKnownState", {}).get("doorsensorState"))
+        name = data.get("name")
+
+        if nuki_id not in self.devices: 
+            #create a device cache for this nuki_id
+            self.device(nuki_id, name)
+
+        for device in self.devices[nuki_id]:
+            device.set_name(name)
+            # Update device state: state 1 = locked, state 3 = unlocked
+            # We map: locked (1) -> False, unlocked (3) -> True
+            device.set(lock_state != 1) # state != 1 means unlocked (True)
+            # Update door sensor state if available
+            # doorsensorState 2 = closed, 3 = opened
+            # We map: closed (2) -> False, opened (3) -> True
+            if door_sensor_state is not None:
+                device._sensor.set(door_sensor_state != 2)
     
     def on_press(self, line, match):
         self.notify_set()
@@ -320,12 +325,13 @@ class NukiBridge(Connector):
         
         
 class Nuki(Service):
-    def __init__(self, api_key: str, token: str):
+    def __init__(self, api_key: str, token: str, listen_for_buttons = False):
         logger.info(f"Nuki service created {api_key=} {token=}")
         super().__init__()
         self.api_key = api_key
         self.token = token
         self.bridges = {}
+        self.listen_for_buttons = listen_for_buttons
 
     
     def CMD(self,cmd=""):
@@ -336,7 +342,7 @@ class Nuki(Service):
 
     def bridge(self,bridge_ip):
         if bridge_ip not in self.bridges:
-            self.bridges[bridge_ip] = NukiBridge(self, bridge_ip, self.token)
+            self.bridges[bridge_ip] = NukiBridge(self, bridge_ip, self.token, listen_for_buttons=self.listen_for_buttons)
         return self.bridges[bridge_ip]
 
     def reduct(self,x):

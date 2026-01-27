@@ -32,10 +32,9 @@ class LutronConnector(Connector):
 
 class LutronDevice(LutronConnector):
     def __init__(self, lutron: 'Lutron', device_id: int):
-        super().__init__()  # Initialize with no value
+        super().__init__(name=f"LutronDevice<{device_id}>")  # Initialize with no value
         self.lutron = lutron
         self.device_id = device_id
-        self.name = f"LutronDevice<{device_id}>"
         self.lutron.register_handler(self)
     
     def _set_action(self, value: float) -> None:
@@ -53,10 +52,9 @@ class LutronDevice(LutronConnector):
 
 class LutronSysvar(LutronConnector):
     def __init__(self, lutron: 'Lutron', sysvar_id: int):
-        super().__init__()  # Initialize with no value
+        super().__init__(name=f"LutronSysvar<{sysvar_id}>")  # Initialize with no value
         self.lutron = lutron
         self.sysvar_id = sysvar_id
-        self.name = f"LutronSysvar<{sysvar_id}>"
         self.lutron.register_handler(self)
     
     def _set_action(self, value: int) -> None:
@@ -74,13 +72,12 @@ class LutronSysvar(LutronConnector):
 class LutronKeypad(LutronConnector):
     def __init__(self, lutron: 'Lutron', keypad_id: int, button_id: int, click_type=3):
         # Click types: 3=press, 4=release, 5=long press, 6=double press
-        super().__init__()  # Initialize with no value
+        super().__init__(name=f"LutronKeypad<{keypad_id}, {button_id}, {click_type}>")  # Initialize with no value
         self.lutron = lutron
         self.keypad_id = keypad_id
         self.button_id = button_id
         self.click_type = click_type
         self._value = False
-        self.name = f"LutronKeypad<{keypad_id}, {button_id}, {click_type}>"
 
         self.lutron.register_handler(self)
         
@@ -101,10 +98,9 @@ class LutronKeypad(LutronConnector):
 
 class ToggleCommand(LutronConnector):
     def __init__(self,lutron,cmd_on=None, cmd_off=None):
-        super().__init__()  # Initialize with no value
+        super().__init__(name=f"ToggleCommand<{cmd_on}, {cmd_off}>")  # Initialize with no value
         self.cmd_on = cmd_on
         self.cmd_off = cmd_off
-        self.name = f"ToggleCommand<{cmd_on}, {cmd_off}>"
         self.lutron=lutron
 
     def _set_action(self, value):
@@ -114,7 +110,7 @@ class ToggleCommand(LutronConnector):
 
 class LutronPattern(LutronConnector):
     def __init__(self, lutron: 'Lutron', pattern: str):
-        super().__init__()  # Initialize with no value
+        super().__init__(name=f"LutronPattern<{pattern}>")  # Initialize with no value
         self.lutron = lutron
         self.pattern = pattern
         self.name = f"LutronPattern<{pattern}>"

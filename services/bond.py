@@ -14,10 +14,9 @@ logger = get_logger(__name__)
 
 class BondDevice(Connector):
     def __init__(self, bond: 'Bond', device_id: str):
-        super().__init__()  # Initialize without parameters
+        super().__init__(name=f"Bond<{device_id}>")  # Initialize without parameters
         self.bond = bond
         self.device_id = device_id
-        self.name = f"Bond<{device_id}>"
         
         # Register the listener for both state updates and action responses
         self.listener = self.bond.listener.filter(f'devices/{device_id}/state.*"power":(?:0|1.*"speed":(0|1|2|3|4|5|6))')
