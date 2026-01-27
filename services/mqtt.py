@@ -64,7 +64,7 @@ class MQTTDevice(Connector):
 
 
 class UserPresense:
-    def __init__(self, mqtt, name, inside_room, outside_room, outside_reset_time=None, outside_distance=None):
+    def __init__(self, mqtt, name, inside_room, outside_room, outside_reset_time=None, outside_distance=None, retain=True):
         self.mqtt = mqtt
         self.name = name
         self.inside_room = inside_room
@@ -73,8 +73,8 @@ class UserPresense:
         self.outside_distance = outside_distance
 
         bool_protocol = {"state_suffix": "", "command_suffix": "", "states": ["false","true"], "commands": ["false", "true"]}
-        self.inside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/inside", protocol=bool_protocol, retain=True)
-        self.outside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/outside", protocol=bool_protocol, retain=True)
+        self.inside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/inside", protocol=bool_protocol, retain=retain)
+        self.outside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/outside", protocol=bool_protocol, retain=retain)
 
         self.timer = None
 
@@ -107,6 +107,7 @@ class UserPresense:
 class ESPresense(Service):
     def __init__(self, service: 'MQTT', inside_room, outside_room, outside_reset_time=3, outside_distance=3):
         logger.info(f"Creating ESPresense (Inside room: {inside_room}, Outside room: {outside_room})")
+        
         self.mqtt = service
         self.inside_room = inside_room
         self.outside_room = outside_room
@@ -114,15 +115,24 @@ class ESPresense(Service):
         self.outside_distance = outside_distance
 
         self.sensors = {}
+
+        self.anybody = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room, retain=False)
         
         # Register the listener for state updates
         self.mqtt.topics.add(f"espresense/devices")
         self.mqtt.topics.add(f"^presense")
+
         self.listener = self.mqtt.listener.filter(f"espresense/devices/(?P<name>[^/]*)/(?P<room>{inside_room}{f'|{outside_room}' if outside_room else ''}) (?P<message>.*)", log=False)
         self.listener.register(self._on_esp32_update)
 
-        self.anybody = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room)
+
+        self.init_listener = self.mqtt.listener.filter(f"^presense/(?P<name>[^/]*)/(?P<location>inside|outside) (?P<state>.*)", log=False)
+        self.init_listener.register(self._on_presense_init)
+
         
+        # # init hack to get initial values from MQTT
+        # [self._get_sensor(name) for name in ["adi","orit","roni","amit","tal"]]
+
     def __getattr__(self, name):
         return self._get_sensor(name)
 
@@ -148,6 +158,19 @@ class ESPresense(Service):
             sensor.parse_esp32_message(match["room"], match["message"])
         except ValueError:
             logger.warning("Problematic espresense line: '%s' (Match: %s)", line, match)
+
+    def _on_presense_init(self, line: str, match: dict):
+        """Handle presense state updates received from MQTT"""
+        try:
+            sensor = self._get_sensor(match["name"])
+            if match["location"] == "inside" and sensor.inside.get() is None:
+                sensor.inside.set(match["state"] == "true", act=False)
+                logger.info("Initialized inside sensor for %s to %s", sensor.name, match["state"])
+            elif match["location"] == "outside" and sensor.outside.get() is None:
+                sensor.outside.set(match["state"] == "true", act=False)
+                logger.info("Initialized outside sensor for %s to %s", sensor.name, match["state"])
+        except ValueError:
+            logger.warning("Problematic presense line: '%s' (Match: %s)", line, match)
 
 
 class MQTT(Service):
