@@ -92,7 +92,7 @@ class Connector:
 
     def once(self, interval=None):
         ret = Once(self,interval=interval)
-        ret.process_same_value_events = self.process_same_value_events
+        ret.process_same_value_events = True #self.process_same_value_events
         return ret
 
     def map(self, cmd):
@@ -186,27 +186,26 @@ class Once(Connector):
 
     def _act(self, value):
         #logger.debug(f"{self.name}._act({value=})")
-        if value:
-            if self._timer is None:
-                self.set(value, act=False)
-                if self._seconds:
-                    self._timer = threading.Timer(self._seconds, lambda: self._stop_timer() or self.set(False, act=False))
-                    self._timer.start()
-        else:
-            #self._stop_timer(value)
+        if self._timer is None:
             self.set(value, act=False)
+            if self._seconds:
+                self._timer = threading.Timer(self._seconds, lambda: self._stop_timer())#XXX# or self.set(False, act=False))
+                self._timer.start()
+        else:
+            logger.debug(f"{self.name}._act({value=}) - timer is running")
+            # quiet set (no notification)
+            self._value = value
 
     def _set_action(self, value: Any):
         #logger.debug(f"{self.name}._set_action({value=})")
-        if value:
-            if self._timer is None:
-                self._source.set(value)
-                if self._seconds:
-                    self._timer = threading.Timer(self._seconds, lambda: self._stop_timer())#XXX# or self._source.set(False))
-                    self._timer.start()
-        else:
-            #self._stop_timer(value)
+        if self._timer is None:
             self._source.set(value)
+            if self._seconds:
+                self._timer = threading.Timer(self._seconds, lambda: self._stop_timer())#XXX# or self._source.set(False))
+                self._timer.start()
+        else:
+            logger.debug(f"{self.name}._act({value=}) - timer is running")
+            pass
 
     def _stop_timer(self, v=False):
         if self._timer:
