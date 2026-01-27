@@ -116,9 +116,9 @@ class ESPresense(Service):
 
         self.sensors = {}
 
-        self.sensors["anybody"]  = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room, retain=False)
-        self.sensors["anybody"].inside.set(0, act=False)
-        self.sensors["anybody"].outside.set(0, act=False)
+        self.anybody  = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room, retain=False)
+        # self.anybody.inside.set(0)
+        # self.anybody.outside.set(0)
 
         # Register the listener for state updates
         self.mqtt.topics.add(f"espresense/devices")
@@ -130,10 +130,6 @@ class ESPresense(Service):
 
         self.init_listener = self.mqtt.listener.filter(f"^presense/(?P<name>[^/]*)/(?P<location>inside|outside) (?P<state>.*)", log=False)
         self.init_listener.register(self._on_presense_init)
-
-        
-        # # init hack to get initial values from MQTT
-        # [self._get_sensor(name) for name in ["adi","orit","roni","amit","tal"]]
 
     def __getattr__(self, name):
         return self._get_sensor(name)
@@ -149,7 +145,7 @@ class ESPresense(Service):
 
         return self.sensors[name]
         
-    def update_anybody_sensor(self, value):
+    def update_anybody_sensor(self, value=None):
         self.anybody.outside.set(1 if any(sensor.outside.get() for sensor in self.sensors.values()) else 0)
         self.anybody.inside.set(1 if any(sensor.inside.get() for sensor in self.sensors.values()) else 0)
         
@@ -164,6 +160,9 @@ class ESPresense(Service):
     def _on_presense_init(self, line: str, match: dict):
         """Handle presense state updates received from MQTT"""
         try:
+            if match["name"] == "anybody":
+                # anybody is a special case, we don't want to initialize it from MQTT
+                return
             sensor = self._get_sensor(match["name"])
             if match["location"] == "inside" and sensor.inside.get() is None:
                 sensor.inside.set(1 if match["state"] == "true" else 0, act=False)
@@ -173,6 +172,7 @@ class ESPresense(Service):
                 logger.info("Initialized outside sensor for %s to %s (%s)", sensor.name, match["state"]=="true", match["state"])
         except ValueError:
             logger.warning("Problematic presense line: '%s' (Match: %s)", line, match)
+        self.update_anybody_sensor()
 
 
 class MQTT(Service):
