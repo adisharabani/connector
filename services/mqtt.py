@@ -65,6 +65,7 @@ class MQTTDevice(Connector):
 
 class UserPresense:
     def __init__(self, mqtt, name, inside_room, outside_room, outside_reset_time=None, outside_distance=None, retain=True):
+        logger.info("Creating UserPresense(name=%s, inside_room=%s, outside_room=%s)", name, inside_room, outside_room)
         self.mqtt = mqtt
         self.name = name
         self.inside_room = inside_room
@@ -78,9 +79,13 @@ class UserPresense:
 
         self.timer = None
 
+    def __repr__(self):
+        return f"UserPresense(name={self.name}, inside={self.inside.get()}, outside={self.outside.get()})"
+
     def parse_esp32_message(self, room, message):
         if room == self.inside_room:
             self.inside.set(1)
+            self.outside.set(0) # we need to check if this is right or not
         elif room == self.outside_room:
             message = json.loads(message)
             # If not home, than we are definitely outside
@@ -116,13 +121,22 @@ class ESPresense(Service):
 
         self.sensors = {}
 
+        self.anybody = None
+
         self.anybody  = UserPresense(self.mqtt, "anybody", self.inside_room, self.outside_room, retain=False)
+        self.anybody_updates_enabled = False
+        def enable_anybody_updates():
+            self.anybody_updates_enabled = True
+            self.update_anybody_sensor()
+        threading.Timer(5, enable_anybody_updates).start()
+   
+
         # self.anybody.inside.set(0)
         # self.anybody.outside.set(0)
 
         # Register the listener for state updates
         self.mqtt.topics.add(f"espresense/devices")
-        self.mqtt.topics.add(f"^presense")
+        self.mqtt.topics.add(f"presense")
 
         self.listener = self.mqtt.listener.filter(f"espresense/devices/(?P<name>[^/]*)/(?P<room>{inside_room}{f'|{outside_room}' if outside_room else ''}) (?P<message>.*)", log=False)
         self.listener.register(self._on_esp32_update)
@@ -146,8 +160,17 @@ class ESPresense(Service):
         return self.sensors[name]
         
     def update_anybody_sensor(self, value=None):
+        if not self.anybody_updates_enabled:
+            return
+            
         self.anybody.outside.set(1 if any(sensor.outside.get() for sensor in self.sensors.values()) else 0)
         self.anybody.inside.set(1 if any(sensor.inside.get() for sensor in self.sensors.values()) else 0)
+
+        inside_keys = [key for key, sensor in self.sensors.items() if sensor.inside.get()]
+        outside_keys = [key for key, sensor in self.sensors.items() if sensor.outside.get()]
+        away_keys = [key for key, sensor in self.sensors.items() if not sensor.inside.get() and not sensor.outside.get()]
+        sensor_states = f"Inside: {inside_keys}; Outside: {outside_keys}; Away: {away_keys}"
+        logger.debug(f"Updated anybody sensor: {'inside ' if self.anybody.inside.get() else ''}{'outside ' if self.anybody.outside.get() else ''}/ {sensor_states}")
         
     def _on_esp32_update(self, line: str, match: dict):
         """Handle espresenses state updates received from MQTT"""
@@ -164,6 +187,7 @@ class ESPresense(Service):
                 # anybody is a special case, we don't want to initialize it from MQTT
                 return
             sensor = self._get_sensor(match["name"])
+            logger.info("Initializing sensor %s: %s", match["name"], repr(sensor))
             if match["location"] == "inside" and sensor.inside.get() is None:
                 sensor.inside.set(1 if match["state"] == "true" else 0, act=False)
                 logger.info("Initialized inside sensor for %s to %s (%s)", sensor.name, match["state"]=="true", match["state"])
