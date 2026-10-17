@@ -77,17 +77,26 @@ class UserPresense:
         self.inside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/inside", protocol=bool_protocol, retain=retain)
         self.outside = MQTTDevice(mqtt=mqtt, topic=f"presense/{name}/outside", protocol=bool_protocol, retain=retain)
 
+        self.inside.device_name = name.lower()
+        self.outside.device_name = name.lower()
+
         self.timer = None
 
     def __repr__(self):
         return f"UserPresense(name={self.name}, inside={self.inside.get()}, outside={self.outside.get()})"
 
     def parse_esp32_message(self, room, message):
+        logger.debug("parse_esp32_message %s %s", room, message)
+        message = json.loads(message)
+        device_name = message.get("name").lower()
+        # if there is a different user device outside than disregard the inside room message
         if room == self.inside_room:
-            self.inside.set(1)
-            self.outside.set(0) # we need to check if this is right or not
+            # make sure the device reported inside is the same actual device that last went outside
+            if device_name == self.outside.device_name:
+                self.inside.set(1)
+                self.outside.set(0) # we need to check if this is right or not
         elif room == self.outside_room:
-            message = json.loads(message)
+            
             # If not home, than we are definitely outside
             if not self.inside.get(): 
                 self.outside.set(1)
@@ -95,7 +104,8 @@ class UserPresense:
             # If we are home, then we are outside only if we are close to the outside sensor
             elif self.outside_distance is None or message["distance"] < self.outside_distance:
                 self.inside.set(0)
-                self.outside.set(1)    
+                self.outside.set(1)   
+                self.outside.device_name = device_name
 
             self.reset_outside_timer()
 
