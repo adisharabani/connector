@@ -93,13 +93,15 @@ class UserPresense:
         if room == self.inside_room:
             # make sure the device reported inside is the same actual device that last went outside
             if device_name == self.outside.device_name:
+                # set outside to 0 but only a few seconds later
+                if self.inside.get() == 0:
+                    self.reset_outside_timer() #self.outside.set(0) # we need to check if this is right or not
                 self.inside.set(1)
-                self.outside.set(0) # we need to check if this is right or not
         elif room == self.outside_room:
-            
             # If not home, than we are definitely outside
             if not self.inside.get(): 
                 self.outside.set(1)
+                self.outside.device_name = device_name
                 
             # If we are home, then we are outside only if we are close to the outside sensor
             elif self.outside_distance is None or message["distance"] < self.outside_distance:
