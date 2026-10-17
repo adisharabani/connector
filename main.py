@@ -7,7 +7,7 @@ from services import *  # This will import all services defined in services/__in
 from config import Configurator
 
 # Setup logging
-setup_logger()
+setup_logger(INFO)
 logger = get_logger(__name__)
 logger.info("Starting home automation connector")
 
